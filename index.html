@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xử lý lời bài hát Nâng Cao</title>
+    <style>
+        /* Đảm bảo body và html chiếm toàn bộ chiều cao viewport */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* Ngăn cuộn trang */
+            display: flex;
+            flex-direction: column;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+
+        /* CSS cho textarea để chiếm toàn bộ không gian còn lại */
+        #myTextarea {
+            flex-grow: 1; /* Cho phép textarea mở rộng để lấp đầy không gian */
+            width: 100%;
+            box-sizing: border-box; /* Bao gồm padding và border vào kích thước tổng thể */
+            padding: 15px;
+            font-size: 1.1em;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            resize: none; /* Tắt khả năng thay đổi kích thước của textarea bằng tay */
+            margin-bottom: 10px;
+            outline: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* Container cho các nút */
+        .button-container {
+            display: flex;
+            gap: 10px; /* Khoảng cách giữa các nút */
+            margin-bottom: 15px;
+        }
+
+        /* CSS cho nút */
+        button {
+            padding: 12px 25px;
+            font-size: 1.0em;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        /* Thanh trạng thái */
+        #statusBar {
+            background-color: #e9ecef;
+            color: #333;
+            padding: 10px 15px;
+            text-align: center;
+            font-size: 0.9em;
+            border-top: 1px solid #dee2e6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            white-space: nowrap; /* Ngăn không cho chữ xuống dòng */
+            overflow: hidden; /* Ẩn phần chữ bị tràn */
+            text-overflow: ellipsis; /* Hiển thị dấu ba chấm nếu chữ bị cắt */
+        }
+
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-processing {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <textarea id="myTextarea" placeholder="Nhập lời bài hát vào đây..."></textarea>
+    
+    <div class="button-container">
+        <button onclick="fixLyrics()">Xử lý lời</button>
+        <button onclick="fixUpper()">Chuyển về chữ thường</button>
+    </div>
+
+    <div id="statusBar">Sẵn sàng.</div>
+
+    <script>
+        const myTextarea = document.getElementById('myTextarea');
+        const statusBar = document.getElementById('statusBar');
+        let statusTimeout; // Biến để lưu trữ timeout của thanh trạng thái
+
+        /**
+         * Cập nhật thanh trạng thái
+         * @param {string} message - Tin nhắn hiển thị
+         * @param {string} type - Loại trạng thái (success, error, processing)
+         * @param {number} duration - Thời gian hiển thị (ms), 0 để giữ nguyên
+         */
+        function updateStatus(message, type = '', duration = 3000) {
+            clearTimeout(statusTimeout); // Xóa timeout cũ nếu có
+
+            statusBar.textContent = message;
+            statusBar.className = ''; // Xóa tất cả các class cũ
+            statusBar.classList.add(type ? `status-${type}` : '');
+
+            if (duration > 0) {
+                statusTimeout = setTimeout(() => {
+                    statusBar.textContent = 'Sẵn sàng.';
+                    statusBar.className = '';
+                }, duration);
+            }
+        }
+
+        /**
+         * Hàm sao chép văn bản vào clipboard
+         * @param {string} text - Văn bản cần sao chép
+         * @returns {Promise<void>}
+         */
+        async function copyToClipboard(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                updateStatus('Đã sao chép vào clipboard!', 'success');
+            } catch (err) {
+                console.error('Không thể sao chép văn bản: ', err);
+                updateStatus('Lỗi khi sao chép vào clipboard!', 'error');
+            }
+        }
+
+		
+		const myEncodeHtml = ['&nbsp;', '&lt;', '&gt;', '&amp;', '&quot;', '&apos;', '&copy;', '&reg;'];
+const myDecodeHtml = [' ', '<', '>', '&', '"', '\'', '©', '®'];
+function removeCharactorInLyrics(string, lang) {
+    for (var ci = 0; ci < myEncodeHtml.length; ci++) {
+        string = string.split(myEncodeHtml[ci]).join(myDecodeHtml[ci]);
+    }
+    string = string.split('¹n').join('ijn');
+    string = string.split('¹').join('');
+    string = string.split('￼').join('');
+    string = string.split('′').join('\'');
+    string = string.split(' ').join(' ');
+    string = string.split('`').join('\'');
+    string = string.split('‘').join('\'');
+    string = string.split('“').join('"');
+    string = string.split('”').join('"');
+    string = string.split('""').join('\'');
+    string = string.split('...').join('');
+    string = string.split('!?').join('!');
+    string = string.split('^').join(' ');
+    string = string.split('#').join(' ');
+    string = string.split('*').join(' ');
+    string = string.split('«').join('"');
+    string = string.split('»').join('"');
+    string = string.split('Ååå').join('å');
+    string = string.split('ååå').join('å');
+    string = string.split('е').join('e');
+    string = string.split('‚').join(' ');
+    string = string.split(' ').join(' ');//Special character
+    string = string.split(' ').join(' ');//Special character
+
+
+    string = string.split('.').join(' ');
+    string = string.split('’').join('\'');
+    string = string.split('´').join('\'');
+    string = string.split(',').join(' ');
+    string = string.split('‚').join(' ');//Special character
+    string = string.split('!').join(' ');
+    string = string.split('?').join(' ');
+    string = string.split(';').join(' ');
+    string = string.split(':').join(' ');
+    string = string.split("''").join('"');
+    string = string.split(' - ').join(' ');
+    string = string.split('- ').join(' ');
+    string = string.split(' -').join(' ');
+    string = string.split('-').join(' ');
+    string = string.split('–').join(' ');
+    string = string.split('—').join(' ');
+    string = string.split('…').join(' ');
+    string = string.split('_').join(' ');
+    string = string.split('/').join(' ');
+
+    while (string.indexOf('  ') != -1)
+        string = string.split('  ').join(' ');
+
+    //Only 1 white spacing between 2 paragraphs
+    while (string.indexOf('\n\n\n') != -1)
+        string = string.split('\n\n\n').join('\n\n');
+
+    string = string.split('( )').join('');
+    string = string.split('()').join('');
+    string = string.split('[]').join('');
+    string = string.split('[ ]').join('');
+    string = string.split(' )').join(')');
+    string = string.split('( ').join('(');
+
+    //Remove note
+    string = string.replace('Historia edycji tekstu', '');
+    string = string.replace('Translate to English', '');
+    string = string.replace('Source  LyricFind', '');
+    string = string.replace('Source  Musixmatch', '');
+    string = string.replace('Report lyrics', '');
+
+    if (lang === "no")//Break line if so long
+    {
+        string = string.split('\n');
+        for (var i = 0; i < string.length; i++) {
+            var words = string[i].trim().split(' ');
+            if (string[i].length > 45 && words.length >= 10) {
+                var y = 0;
+                var newString = "";
+                var lengthToBreak = words.length > 11 ? 6 : 5;
+                while (words.length > 0) {
+                    y++;
+                    if (y <= lengthToBreak) {
+                        newString = newString + words[0] + " ";
+                    }
+                    else {
+                        if (words.length > lengthToBreak && words.length < 9) {
+                            newString = newString + "\n" + words.join(" ");
+                            break;
+                        }
+                        else {
+                            newString = newString + words[0] + (words.length > 0 ? "\n" : "");
+                            y = 0;
+                            lengthToBreak = words.length > 11 ? 6 : 5;
+                        }
+                    }
+                    words.shift();
+                }
+                string[i] = newString;
+            }
+        }
+        string = string.join('\n');
+    }
+
+    string = string.split('\n');
+    for (var i = 0; i < string.length; i++) {
+        string[i] = string[i].trim();
+        if (string[i]) {
+            //Xử lý ngân
+            var lstEcho = [
+                { echo: "lala", replace: "la la", preList: [{ start: "", end: "" }] },
+                { echo: "Lala", replace: "La la", preList: [{ start: "", end: "" }] },
+
+                { echo: "jala", replace: "ja la" },
+                { echo: "Jala", replace: "Ja la" },
+
+                { echo: "ohoh", replace: "oh oh" },
+                { echo: "Ohoh", replace: "Oh oh" },
+
+                { echo: "ooh", replace: "oh" },
+                { echo: "Ooh", replace: "Oh" },
+
+                { echo: "ohh", replace: "oh" },
+                { echo: "Ohh", replace: "Oh" },
+
+                { echo: "hoo", replace: "ho" },
+                { echo: "Hoo", replace: "Ho" },
+
+                { echo: "hhh", replace: "h" },
+                { echo: "Hhh", replace: "hhh" },
+
+                { echo: "aah", replace: "ah" },
+                { echo: "Aah", replace: "Ah" },
+
+                { echo: "ahah", replace: "ah ah" },
+                { echo: "Ahah", replace: "Ah ah" },
+
+
+                { echo: "haa", replace: "ha" },
+                { echo: "Haa", replace: "Ha" },
+
+                { echo: "ahh", replace: "ah" },
+                { echo: "Ahh", replace: "Ah" },
+
+                { echo: "haha", replace: "ha ha" },
+                { echo: "Haha", replace: "Ha ha" },
+
+
+                { echo: "uuh", replace: "uh" },
+                { echo: "Uuh", replace: "Uh" },
+
+                { echo: "huu", replace: "hu" },
+                { echo: "Hu", replace: "Hu" },
+
+                { echo: "uhh", replace: "uh" },
+                { echo: "Uhh", replace: "Uh" },
+
+                { echo: "uhuh", replace: "uh uh" },
+                { echo: "Uhuh", replace: "Uh uh" },
+
+                { echo: "hihi", replace: "hi hi" },
+                { echo: "Hihi", replace: "Hi hi" },
+
+                { echo: "hii", replace: "hi" },
+                { echo: "Hii", replace: "Hi" },
+
+                { echo: "jaja", replace: "ja ja" },
+                { echo: "Jaja", replace: "Ja ja" },
+
+                { echo: "laa", replace: "la" },
+                { echo: "Laa", replace: "La" },
+
+                { echo: "mmm", replace: "mh" },
+                { echo: "Mmm", replace: "Mh" },
+
+                { echo: "mmh", replace: "mh" },
+                { echo: "Mmh", replace: "Mh" },
+
+                { echo: "hoehoe", replace: "hoe hoe" },
+                { echo: "Hoehoe", replace: "Hoe hoe" },
+
+                { echo: "tete", replace: "te te" },
+                { echo: "Tete", replace: "Te te" },
+
+                { echo: "dede", replace: "de de" },
+                { echo: "Dede", replace: "De de" },
+
+                { echo: "aaa", replace: "aa" },
+                { echo: "Aaa", replace: "Aa" },
+
+                { echo: "iii", replace: "ii" },
+                { echo: "Iii", replace: "Ii" },
+
+                { echo: "eeej", replace: "eej" },
+
+                { echo: "eeen", replace: "een" },
+
+                { echo: "Yooo", replace: "Yo" },
+                { echo: "yooo", replace: "yo" },
+
+                { echo: "nahnah", replace: "nah nah" },
+                { echo: "Nahnah", replace: "Nah nah" },
+
+                { echo: "Wowwow", replace: "Wow wow" },
+                { echo: "wowwow", replace: "wow wow" },
+
+                { echo: "aanaan", replace: "aan aan" },
+                { echo: "Aanaan", replace: "Aan aan" },
+
+                { echo: "aaan", replace: "aan" },
+
+                { echo: "hmm", replace: "hm", preList: [{ start: "", end: "" }] },
+                { echo: "Hmm", replace: "Hm", preList: [{ start: "", end: "" }] },
+                { echo: "Hmhm", replace: "Hm hm", preList: [{ start: "", end: "" }] },
+                { echo: "hmhm", replace: "hm hm", preList: [{ start: "", end: "" }] },
+
+            ];
+            <!-- var doloop = true; --> --->>Tạm thời bỏ đoaạn xử lý ngân
+            <!-- while (doloop) { -->
+                <!-- doloop = false; -->
+                <!-- for (var k = 0; k < lstEcho.length; k++) { -->
+                    <!-- var preList = [ -->
+                        <!-- { start: " ", end: "" }, -->
+                        <!-- { start: "", end: " " }, -->
+                        <!-- { start: "(", end: "" }, -->
+                        <!-- { start: "", end: ")" }, -->
+                    <!-- ]; -->
+                    <!-- if (lstEcho[k].preList != undefined) { -->
+                        <!-- for (var m = 0; m < lstEcho[k].preList.length; m++) { -->
+                            <!-- preList.push(lstEcho[k].preList[m]); -->
+                        <!-- } -->
+                    <!-- } -->
+                    <!-- for (var j = 0; j < preList.length; j++) { -->
+                        <!-- var source = preList[j].start + lstEcho[k].echo + preList[j].end; -->
+                        <!-- var destination = preList[j].start + lstEcho[k].replace + preList[j].end; -->
+                        <!-- while (string[i].indexOf(source) != -1) { -->
+                            <!-- string[i] = string[i].replace(source, destination); -->
+                            <!-- doloop = true; -->
+                        <!-- } -->
+                    <!-- } -->
+                <!-- } -->
+            <!-- } -->
+
+            if (string[i].endsWith(" '")) {
+                string[i] = string[i].substring(0, string[i].length - 2) + "'";
+            }
+            if (string[i].endsWith(' "')) {
+                string[i] = string[i].substring(0, string[i].length - 2) + '"';
+            }
+            if (string[i].startsWith('(') && string[i].endsWith(')') && string[i].split(" ").length > 4 && (string[i].split(" ")[1][0].toUpperCase() != string[i].split(" ")[1][0])) {
+                string[i] = string[i].substring(1, string[i].length - 1);
+            }
+            if (string[i].startsWith('(') && !string[i].endsWith(')') && string[i].indexOf(")") != -1) {
+                string[i] = string[i].substring(1);
+                string[i] = string[i].substring(0, string[i].indexOf(")")) + "\n" + toCapitalFirstLetter(string[i].substring(string[i].indexOf(")") + 1));
+            }
+
+            var strToCheck = string[i].toLowerCase();
+            //Remove note in Genus
+            if ((strToCheck.startsWith('[ver') || strToCheck.startsWith('[chorus') || strToCheck.startsWith('[pre')
+                || strToCheck.startsWith('[etter') || strToCheck.startsWith('[intro') || strToCheck.startsWith('[hook')
+                || strToCheck.startsWith('[ref') || strToCheck.startsWith('[over') || strToCheck.startsWith('[out')
+                || strToCheck.startsWith('[bridge') || strToCheck.startsWith('[snakking') || strToCheck.startsWith('[couplet')
+                || strToCheck.startsWith('[alternatief refrein') || strToCheck.startsWith('[songtekst')
+                || strToCheck.startsWith('[voor refrein') || strToCheck.startsWith('[brug')
+                || strToCheck.startsWith('[skit') || strToCheck.startsWith('[donnie') || strToCheck.startsWith('[interlude')
+                || strToCheck.startsWith('[gescratch') || strToCheck.startsWith('[post')
+                || strToCheck.startsWith('[end hook') || strToCheck.startsWith('[chrous')
+                || strToCheck.startsWith('[instrumenta') || strToCheck.startsWith('[strofe')
+				|| strToCheck.startsWith('[omkvæd murro'))
+                && strToCheck.endsWith(']') || strToCheck === "ref" || strToCheck.startsWith('songwriters ') || strToCheck.startsWith('released ') || strToCheck.startsWith('songtekst ')) {
+                string[i] = "";
+            }
+            //Remove note
+            if (string[i].indexOf("Official Lyrics") != -1) {
+                string[i] = "";
+            }
+            if (string[i].indexOf("Publishing") != -1) {
+                string[i] = "";
+            }
+            if (string[i].indexOf("© Copyright") != -1) {
+                string[i] = "";
+            }
+            if (string[i].indexOf("lyrics ©") != -1) {
+                string[i] = "";
+            }
+            if (string[i] == "C") {
+                string[i] = "";
+            }
+            if (string[i].indexOf("Lyrics geupload door") != -1) {
+                string[i] = "";
+            }
+            if (string[i].indexOf("Tekst en") != -1) {
+                string[i] = "";
+            }
+            //Hoe Durven Ze
+            //Lowercase after character
+            string[i] = makeLowerCaseAfterCharacter(string[i]);
+            //Uppercase for the first letter (skip character)
+            string[i] = toCapitalFirstLetter(string[i]);
+            //Lowercase for singing part
+            if (string[i].indexOf(')') == string[i].length - 1) {
+                for (var k = string[i].length - 1; k >= 0; k--) {
+                    if (string[i][k] == '(' && string[i][k + 2].toUpperCase() != string[i][k + 2]) {
+                        //string[i] = string[i].substring(0, k + 1) + '' + string[i].substring(k + 1, k + 2).toLowerCase() + '' + string[i].substring(k + 2);
+                        string[i] = string[i].substring(0, k + 1) + '' + string[i].substring(k + 1).toLowerCase();
+                        break;
+                    }
+                }
+            }
+            if (i > 0 && string[i].startsWith('(') && string[i].endsWith(')') && string[i].split(" ").length <= 4) {
+                string[i - 1] = string[i - 1] + " " + string[i];
+                string[i] = "";
+            }
+        }
+    }
+    string = string.join('\n');
+    //Change quote
+    // var countQuote = 0;
+    // for (var i = 0; i < string.length; i++) {
+    // 	if (string[i] && (string[i] == '"' || string[i] == '„')) {
+    // 		if (countQuote == 0) {
+    // 			countQuote = 1;
+    // 			string = string.substring(0, i) + '„' + string.substring(i + 1);
+    // 		} else if (countQuote == 1) {
+    // 			countQuote = 0;
+    // 			string = string.substring(0, i) + '"' + string.substring(i + 1);
+    // 		}
+    // 	}
+    // }
+    //string = string.split(' "').join('"');
+	debugger
+    while (string.indexOf('\n\n\n') != -1)
+        string = string.split('\n\n\n').join('\n\n');
+debugger
+    while (string.endsWith('\n')) {
+        string = string.substring(0, string.length - 1);
+        string = string.trim();
+    }
+	debugger
+    while (string.startsWith('\n')) {
+        string = string.substring(1);
+        string = string.trim();
+    }
+	debugger
+    //string = markNoneWhitelistLyrics(string, $("select[name='language']").val() || $('#ipLanguage').val()); //Use
+    return string;
+}
+
+function markNoneWhitelistLyrics(src, lang) {
+    var listWhitelistChars = {
+        "nl": ["!", "#", "$", "%", "&", "'", "(", ")", ",", "-", ".", "/", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ":", ";", "?", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "[", "\\", "]", "_", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "Ä", "Ö", "Ü", "ß", "ä", "ö", "ü", "‘", "“", "„", "€", '"', "+", "@", "¡", "¿", "Á", "É", "Í", "Ñ", "Ó", "Ú", "á", "é", "í", "ñ", "ó", "ú", "^", "À", "Â", "Æ", "Ç", "È", "Ê", "Ë", "Î", "Ï", "Ô", "Ù", "Û", "à", "â", "æ", "ç", "è", "ê", "ë", "î", "ï", "ô", "ù", "û", "Œ", "œ", "¥", "ì", "ò", "Ã", "Õ", "ã", "õ", "Č", "č", "Ğ", "ğ", "İ", "ı", "Ş", "ş", "ą", "ć", "ę", "ł", "ń", "ś", "ź", "ż", "Ą", "Ć", "Ę", "Ł", "Ń", "Ś", "Ź", "Ż", " ", "=", "*", "Å", "Ø", "å", "ø", "ƒ", "μ", "σ", "χ", "π", "Α", "Β", "Γ", "Δ", "Ε", "Ζ", "Η", "Θ", "Ι", "Κ", "Λ", "Μ", "Ν", "Ξ", "Ο", "Π", "Ρ", "Σ", "Τ", "Υ", "Φ", "Χ", "Ψ", "Ω", "α", "β", "γ", "δ", "ε", "ζ", "η", "θ", "ι", "κ", "λ", "ν", "ξ", "ο", "ρ", "ς", "τ", "υ", "φ", "ψ", "ω", "ϑ", "ϒ", "ϖ", "Ά", "ά", "Έ", "έ", "Ή", "ή", "Ί", "ί", "Ό", "ό", "Ύ", "ύ", "Ώ", "ώ", "ΐ", "ΰ", "Ϊ", "ϊ", "Ϋ", "ϋ", "ἀ", "ἐ", "ἠ", "ἰ", "ὀ", "ὐ", "ὰ", "ᾀ", "ᾐ", "ᾠ", "ᾰ", "ῐ", "ῠ", "ἁ", "ἑ", "ἡ", "ἱ", "ὁ", "ὑ", "ὡ", "ά", "ᾁ", "ᾑ", "ᾡ", "ᾱ", "ῑ", "ῡ", "ἂ", "ἒ", "ἢ", "ἲ", "ὂ", "ὒ", "ὢ", "ὲ", "ᾂ", "ᾒ", "ᾢ", "ᾲ", "ῂ", "ῒ", "ῢ", "ῲ", "ἃ", "ἓ", "ἣ", "ἳ", "ὃ", "ὓ", "ὣ", "έ", "ᾃ", "ᾓ", "ᾣ", "ᾳ", "ῃ", "ΐ", "ΰ", "ῳ", "ἄ", "ἔ", "ἤ", "ἴ", "ὄ", "ὔ", "ὤ", "ὴ", "ᾄ", "ᾔ", "ᾤ", "ᾴ", "ῄ", "ῤ", "ῴ", "ἅ", "ἕ", "ἥ", "ἵ", "ὅ", "ὕ", "ὥ", "ή", "ᾅ", "ᾕ", "ᾥ", "ῥ", "ἆ", "ἦ", "ἶ", "ὖ", "ὦ", "ὶ", "ᾆ", "ᾖ", "ᾦ", "ᾶ", "ῆ", "ῖ", "ῦ", "ῶ", "ἇ", "ἧ", "ἷ", "ὗ", "ὧ", "ί", "ᾇ", "ᾗ", "ᾧ", "ᾷ", "ῇ", "ῗ", "ῧ", "ῷ", "Ἀ", "Ἐ", "Ἠ", "Ἰ", "Ὀ", "Ὠ", "ὸ", "ᾈ", "ᾘ", "ᾨ", "Ᾰ", "Ὲ", "Ῐ", "Ῠ", "Ὸ", "Ἁ", "Ἑ", "Ἡ", "Ἱ", "Ὁ", "Ὑ", "Ὡ", "ό", "ᾉ", "ᾙ", "ᾩ", "Ᾱ", "Έ", "Ῑ", "Ῡ", "Ό", "Ἂ", "Ἒ", "Ἢ", "Ἲ", "Ὂ", "Ὢ", "ὺ", "ᾊ", "ᾚ", "ᾪ", "Ὰ", "Ὴ", "Ὶ", "Ὺ", "Ὼ", "Ἃ", "Ἓ", "Ἣ", "Ἳ", "Ὃ", "Ὓ", "Ὣ", "ύ", "ᾋ", "ᾛ", "ᾫ", "Ά", "Ή", "Ί", "Ύ", "Ώ", "Ἄ", "Ἔ", "Ἤ", "Ἴ", "Ὄ", "Ὤ", "ὼ", "ᾌ", "ᾜ", "ᾬ", "ᾼ", "ῌ", "Ῥ", "ῼ", "Ἅ", "Ἕ", "Ἥ", "Ἵ", "Ὅ", "Ὕ", "Ὥ", "ώ", "ᾍ", "ᾝ", "ᾭ", "᾽", "῍", "῝", "῭", "´", "Ἆ", "Ἦ", "Ἶ", "Ὦ", "ᾎ", "ᾞ", "ᾮ", "ι", "῎", "῞", "΅", "῾", "Ἇ", "Ἧ", "Ἷ", "Ὗ", "Ὧ", "ᾏ", "ᾟ", "ᾯ", "᾿", "῏", "῟", "`", "ij", "IJ", "Ă", "ă", "Ș", "ș", "Ț", "ț"]
+    }; //Get this list in https://eu-uv.lyricfind.com/tracks/add. Open console and check window.langWhitelist
+
+
+    if (lang && listWhitelistChars[lang]) {
+        let allowedChars = `${listWhitelistChars[lang].join('')}\n\r`;
+        var regex = new RegExp('[^' + allowedChars + ']', 'g');
+        return src.replace(regex, '�');
+    }
+    return src;
+}
+
+function toCapitalFirstLetter(str) {
+    if (str) {
+        str = str.trim();
+        for (var j = 0; j < str.length; j++) {
+            if (toTomanizedStr(str[j]).toLowerCase().match(/[a-z]/i) || str[j].toLowerCase().match(/[a-z]/i)) {
+                str = str.substring(0, j + 1).toUpperCase() + '' + str.substring(j + 1);
+                break;
+            }
+        }
+    }
+    return str;
+}
+
+function makeLowerCaseAfterCharacter(str) {
+    str = str.replace(/(^|\. *)([A-Z])/g, function (match, separator, char) {
+        return separator + char.toLowerCase();
+    });
+
+    str = str.replace(/(^|\! *)([A-Z])/g, function (match, separator, char) {
+        return separator + char.toLowerCase();
+    });
+
+    str = str.replace(/(^|\? *)([A-Z])/g, function (match, separator, char) {
+        return separator + char.toLowerCase();
+    });
+
+    return str;
+}
+
+function makeUpperCaseAfterCharacter(str) {
+    str = str.replace(/(^|\. *)([a-z])/g, function (match, separator, char) {
+        return separator + char.toUpperCase();
+    });
+
+    str = str.replace(/(^|\! *)([a-z])/g, function (match, separator, char) {
+        return separator + char.toUpperCase();
+    });
+
+    str = str.replace(/(^|\? *)([a-z])/g, function (match, separator, char) {
+        return separator + char.toUpperCase();
+    });
+    return str;
+}
+function toTomanizedStr(string) {
+    return string.split('').map(function (letter) {
+        let i = this.accents.indexOf(letter)
+        return (i !== -1) ? this.out[i] : letter
+    }.bind({
+        accents: 'ÀÁÂÃÄÅĄàáâãäåąßÒÓÔÕÕÖØÓòóôõöøóÈÉÊËĘèéêëęðÇĆçćÐÌÍÎÏìíîïÙÚÛÜùúûüÑŃñńŠŚšśŸÿýŽŻŹžżźŁł',
+        out: 'AAAAAAAaaaaaaaBOOOOOOOOoooooooEEEEEeeeeeeCCccDIIIIiiiiUUUUuuuuNNnnSSssYyyZZZzzzLl'
+    })).join('');
+}
+
+async function fixLyrics() {
+	
+	
+	updateStatus('Đang xử lý 1...', 'processing', 0); // Hiển thị trạng thái đang xử lý, không tự động tắt
+
+            const inputText = myTextarea.value;
+            // Giả lập một quá trình xử lý mất thời gian
+            await new Promise(resolve => setTimeout(resolve, 500)); 
+            const processedText = removeCharactorInLyrics(inputText);
+
+            myTextarea.value = processedText; // Cập nhật lại textarea
+
+            // Sao chép kết quả vào clipboard
+            await copyToClipboard(processedText);
+			
+}
+async function fixUpper() {
+    updateStatus('Đang xử lý 1...', 'processing', 0); // Hiển thị trạng thái đang xử lý, không tự động tắt
+
+            const inputText = myTextarea.value;
+            // Giả lập một quá trình xử lý mất thời gian
+            await new Promise(resolve => setTimeout(resolve, 500)); 
+            const processedText = removeCharactorInLyrics(inputText.toLowerCase());
+
+            myTextarea.value = processedText; // Cập nhật lại textarea
+
+            // Sao chép kết quả vào clipboard
+            await copyToClipboard(processedText);
+			
+}
+
+    </script>
+
+</body>
+</html>
